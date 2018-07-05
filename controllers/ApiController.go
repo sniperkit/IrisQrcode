@@ -15,6 +15,7 @@ import (
 	"github.com/boombuler/barcode"
 	"github.com/boombuler/barcode/qr"
 	"image/png"
+	"net/url"
 )
 
 type ApiController struct {
@@ -52,6 +53,10 @@ func (c ApiController) ShowUrlCode() string {
 	cacheKey := "UrlCode_"+code
 	cacheVal, _ := redis.String(redisClient.Do("GET", cacheKey))
 	if cacheVal != "" {
+		up, _ := url.Parse(cacheVal)
+		if up.Scheme == "http" || up.Scheme == "https" {
+			c.Ctx.Redirect(cacheVal)
+		}
 		return cacheVal
 	} else {
 		return "url error"
