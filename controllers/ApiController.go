@@ -198,8 +198,7 @@ func (c ApiController) CacheCodeVisit(code string) error {
 	return err
 }
 
-func (c ApiController) GetQrcodes() interface{} {
-
+func (c ApiController) GetUrls() interface{} {
 	db, dberr := gorm.Open("mysql", os.Getenv("MYSQL_CON"))
 	if dberr != nil {
 		c.Ctx.StatusCode(500)
@@ -223,6 +222,34 @@ func (c ApiController) GetQrcodes() interface{} {
 			"msg":     "",
 			"result":  urlObjs,
 		}
+	}
+}
+
+func (c ApiController) GetUrlsRecache() interface{} {
+	db, dberr := gorm.Open("mysql", os.Getenv("MYSQL_CON"))
+	if dberr != nil {
+		c.Ctx.StatusCode(500)
+		return iris.Map{
+			"success": false,
+			"msg":     dberr.Error(),
+		}
+	}
+	defer db.Close()
+
+	urlObjs := make([]models.Url, 0)
+	dbResult := db.Where(" 1 = 1 ").Find(&urlObjs)
+	if dbResult.Error != nil {
+		return iris.Map{
+			"success": false,
+			"msg":     dbResult.Error.Error(),
+		}
+	}
+	for _, urlObj := range urlObjs {
+		c.CacheUrlObj(urlObj)
+	}
+	return iris.Map{
+		"success": true,
+		"msg":     "code cached",
 	}
 }
 
