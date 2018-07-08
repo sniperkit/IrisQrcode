@@ -58,7 +58,7 @@ func (c ApiController) ShowUrlCode() string {
 		c.CacheCodeVisit(code)
 		up, _ := url.Parse(cacheVal)
 		if up.Scheme == "http" || up.Scheme == "https" {
-			// c.Ctx.Redirect(cacheVal)
+			c.Ctx.Redirect(cacheVal)
 		}
 		return cacheVal
 	} else {
