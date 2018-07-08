@@ -10,17 +10,19 @@ import (
 	"os"
 	"github.com/huannet/IrisQrcode/tools"
 	"strings"
-	"log"
 	"github.com/kataras/iris/mvc"
 	"github.com/boombuler/barcode"
 	"github.com/boombuler/barcode/qr"
 	"image/png"
 	"net/url"
+	"strconv"
+	"net"
+	"fmt"
 )
 
 type ApiController struct {
-	Ctx iris.Context
-	RedisPool    *redis.Pool
+	Ctx       iris.Context
+	RedisPool *redis.Pool
 }
 
 func (c ApiController) BeforeActivation(b mvc.BeforeActivation) {
@@ -28,14 +30,14 @@ func (c ApiController) BeforeActivation(b mvc.BeforeActivation) {
 	b.Handle("GET", "/q/{code:string urlCode(8)}", "QrCodeByCode")
 }
 
-func (c ApiController) QrCodeByCode(){
+func (c ApiController) QrCodeByCode() {
 	code := c.Ctx.Params().Get("code")
-	qrValue := os.Getenv("HOME_URL")+"/a/"+code
+	qrValue := os.Getenv("HOME_URL") + "/a/" + code
 	qrCode, _ := qr.Encode(qrValue, qr.M, qr.Auto)
 	qrCode, _ = barcode.Scale(qrCode, 200, 200)
-	filename := code+".png"
-	fullname := "./storage/upload/"+filename
-	exists , _ := tools.PathExists(fullname)
+	filename := code + ".png"
+	fullname := "./storage/upload/" + filename
+	exists, _ := tools.PathExists(fullname)
 	if !exists {
 		file, _ := os.Create(fullname)
 		defer file.Close()
@@ -50,12 +52,13 @@ func (c ApiController) ShowUrlCode() string {
 	redisClient := c.RedisPool.Get()
 	defer redisClient.Close()
 
-	cacheKey := "UrlCode_"+code
+	cacheKey := "UrlCode_" + code
 	cacheVal, _ := redis.String(redisClient.Do("GET", cacheKey))
 	if cacheVal != "" {
+		c.CacheCodeVisit(code)
 		up, _ := url.Parse(cacheVal)
 		if up.Scheme == "http" || up.Scheme == "https" {
-			c.Ctx.Redirect(cacheVal)
+			// c.Ctx.Redirect(cacheVal)
 		}
 		return cacheVal
 	} else {
@@ -111,11 +114,12 @@ func (c ApiController) PostUrl() interface{} {
 				"msg":     "db NewRecord error",
 			}
 		} else {
-			log.Println("new url record:", urlCode)
+			// log.Println("new url record:", urlCode)
 			c.CacheUrlObj(urlObj)
 			return iris.Map{
 				"success": true,
 				"msg":     "ok",
+				"result":  urlCode,
 			}
 		}
 	} else {
@@ -134,7 +138,7 @@ func (c ApiController) GetTest() interface{} {
 
 	cacheKey := "test"
 	cacheVal := ""
-	if exists, _:= redis.Bool(redisClient.Do("EXISTS", cacheKey)); exists {
+	if exists, _ := redis.Bool(redisClient.Do("EXISTS", cacheKey)); exists {
 		cacheVal, _ = redis.String(redisClient.Do("GET", cacheKey))
 	} else {
 		cacheVal = time.Now().Format("2006-01-02 15:04:05")
@@ -169,4 +173,54 @@ func (c ApiController) CacheUrlObj(urlObj models.Url) error {
 	return err
 }
 
+func (c ApiController) CacheCodeVisit(code string) error {
+	redisClient := c.RedisPool.Get()
+	defer redisClient.Close()
 
+	remoteAddr := c.Ctx.RemoteAddr()
+	if ip := c.Ctx.GetHeader("XRealIP"); ip != "" {
+		remoteAddr = ip
+	} else if ip := c.Ctx.GetHeader("XForwardedFor"); ip != "" {
+		remoteAddr = ip
+	} else {
+		remoteAddr, _, _ = net.SplitHostPort(remoteAddr)
+	}
+	now := time.Now()
+	hour := now.Hour()
+	cacheKey := "CodeVisit_" + strconv.Itoa(hour)
+	cacheVal := fmt.Sprintf("%s;%s;%d", code, remoteAddr, now.Unix())
+	fmt.Println(cacheKey, cacheVal)
+	_, err := redisClient.Do("rpush", cacheKey, cacheVal)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	return err
+}
+
+func (c ApiController) GetQrcodes() interface{} {
+
+	db, dberr := gorm.Open("mysql", os.Getenv("MYSQL_CON"))
+	if dberr != nil {
+		c.Ctx.StatusCode(500)
+		return iris.Map{
+			"success": false,
+			"msg":     dberr.Error(),
+		}
+	}
+	defer db.Close()
+
+	urlObjs := make([]models.Url, 0)
+	dbResult := db.Where(" 1 = 1 ").Find(&urlObjs)
+	if dbResult.Error != nil {
+		return iris.Map{
+			"success": false,
+			"msg":     dbResult.Error.Error(),
+		}
+	} else {
+		return iris.Map{
+			"success": true,
+			"msg":     "",
+			"result":  urlObjs,
+		}
+	}
+}

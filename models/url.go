@@ -1,9 +1,9 @@
 package models
 
 type Url struct {
-	Id int
-	Code  string
-	ToUrl string
+	Id int `json:"-"`
+	Code  string `json:"code"`
+	ToUrl string `json:"url"`
 }
 
 func (this Url) TableName() string {
