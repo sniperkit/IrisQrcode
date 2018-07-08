@@ -26,8 +26,9 @@ type ApiController struct {
 }
 
 func (c ApiController) BeforeActivation(b mvc.BeforeActivation) {
-	b.Handle("GET", "/a/{code:string urlCode(8)}", "ShowUrlCode")
-	b.Handle("GET", "/q/{code:string urlCode(8)}", "QrCodeByCode")
+	b.Handle("GET", "/a/{code:string urlCode(8)}", "ShowUrlCode")  //code到url并跳转
+	b.Handle("GET", "/q/{code:string urlCode(8)}", "QrCodeByCode") //code生成qrcode
+	b.Handle("GET", "/c/{code:string urlCode(8)}", "CodeRecache") //recache code
 }
 
 func (c ApiController) QrCodeByCode() {
@@ -221,6 +222,45 @@ func (c ApiController) GetQrcodes() interface{} {
 			"success": true,
 			"msg":     "",
 			"result":  urlObjs,
+		}
+	}
+}
+
+func (c ApiController) CodeRecache() interface{} {
+	code := c.Ctx.Params().Get("code")
+
+
+	db, dberr := gorm.Open("mysql", os.Getenv("MYSQL_CON"))
+	if dberr != nil {
+		c.Ctx.StatusCode(500)
+		return iris.Map{
+			"success": false,
+			"msg":     dberr.Error(),
+		}
+	}
+	defer db.Close()
+
+	urlObj := models.Url{}
+	dbResult := db.Where("code = ? ", code).First(&urlObj)
+	if dbResult.RecordNotFound() {
+		c.Ctx.StatusCode(500)
+		return iris.Map{
+			"success": false,
+			"msg":     "code not found",
+		}
+	}
+
+	err := c.CacheUrlObj(urlObj)
+	if err != nil {
+		c.Ctx.StatusCode(500)
+		return iris.Map{
+			"success": false,
+			"msg":     err.Error(),
+		}
+	} else {
+		return iris.Map{
+			"success": true,
+			"msg":     "code cached",
 		}
 	}
 }
