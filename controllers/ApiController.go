@@ -68,9 +68,13 @@ func (c ApiController) ShowUrlCode() string {
 }
 
 func (c ApiController) Get() interface{} {
+	ip1 := c.Ctx.GetHeader("XRealIP")
+	ip2 := c.Ctx.RemoteAddr()
+	ip3 := c.Ctx.GetHeader("XForwardedFor")
+
 	return iris.Map{
 		"success": true,
-		"msg":     "This is api page.",
+		"msg":     fmt.Sprintf("%s, %s, %s<br>", ip1, ip2, ip3),
 	}
 }
 
